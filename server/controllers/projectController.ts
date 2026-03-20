@@ -18,7 +18,7 @@ const loadImage = (path: string, mimeType: string) => {
 }
 
 export const createProject = async (req: Request, res: Response) => {
-    let tempProjectId: string;
+    let tempProjectId: string | undefined;
     const { userId } = req.auth();
     let isCreditDeducted = false;
 
@@ -101,8 +101,8 @@ export const createProject = async (req: Request, res: Response) => {
         }
 
         // image to base64 structure for ai model
-        const img1base64 = loadImage(images[0].path, images[0].mimeType);
-        const img2base64 = loadImage(images[1].path, images[1].mimeType);
+        const img1base64 = loadImage(images[0].path, images[0].mimetype);
+        const img2base64 = loadImage(images[1].path, images[1].mimetype);
 
         const prompt = {
             text: `Combine the person and product into a realistic photo. Make the person naturally hold or use the product. Match lighting, shadows, scale and perspective. Make the person stand in professional studio lighting. Output ecommerce-quality photo realistic imagery.
@@ -135,7 +135,7 @@ export const createProject = async (req: Request, res: Response) => {
             throw new Error('Failed to generate image');
         }
 
-        const base64Image = `data: image/png; base64,${finalBuffer.toString('base64')}`
+        const base64Image = `data:image/png;base64,${finalBuffer.toString('base64')}`
 
         const uploadResult = await cloudinary.uploader.upload(base64Image,
             { resource_type: 'image' });
@@ -151,7 +151,7 @@ export const createProject = async (req: Request, res: Response) => {
         res.json({ projectId: project.id });
 
     } catch (error: any) {
-        if (tempProjectId!) {
+        if (tempProjectId) {
 
             // update project status and error message
             await prisma.project.update({
@@ -219,7 +219,6 @@ export const createVideo = async (req: Request, res: Response) => {
         }
 
         const image = await axios.get(project.generatedImage, { responseType: 'arraybuffer', });
-
         const imageBytes: any = Buffer.from(image.data);
 
         let operation: any = await ai.models.generateVideos({
@@ -244,10 +243,11 @@ export const createVideo = async (req: Request, res: Response) => {
             })
         }
         const filename = `${userId}-${Date.now()}.mp4`;
-        const filePath = path.join('videos', filename)
+        const videosDir = path.resolve('videos');
+        const filePath = path.join(videosDir, filename);
 
-        // Create the images directory if it doesn't exist
-        fs.mkdirSync('videos', { recursive: true })
+        // Create the videos directory if it doesn't exist
+        fs.mkdirSync(videosDir, { recursive: true });
 
         if (!operation.response.generatedVideos) {
             throw new Error(operation.response.raiMediaFilteredReasons[0])
@@ -299,15 +299,60 @@ export const createVideo = async (req: Request, res: Response) => {
 
 export const getAllPublishedProjects = async (req: Request, res: Response) => {
     try {
-        
+        const projects = await prisma.project.findMany({
+            where: { isPublished: true }
+        })
+        res.json({projects})
+
     } catch (error: any) {
         Sentry.captureException(error);
         res.status(500).json({ message: error.message });
     }
 }
 
+// export const deleteProject = async (req: Request, res: Response) => {
+//     try {
+//         const { userId } = req.auth();
+//         const { projectId } = req.params;
+
+//         const project = await prisma.project.findUnique({
+//             where: { id: projectId, userId }
+//         })
+
+//         if (!project) {
+//             return res.status(404).json({ message: 'Project not found' })
+//         }
+
+//         await prisma.project.delete({
+//             where: { id: projectId }
+//         })
+
+//         res.json({ message: 'Project deleted successfully' })
+//     } catch (error: any) {
+//         Sentry.captureException(error);
+//         res.status(500).json({ message: error.message });
+//     }
+// }
+
 export const deleteProject = async (req: Request, res: Response) => {
     try {
+        const { userId } = req.auth();
+        const projectId = req.params.projectId as string;
+
+        const project = await prisma.project.findFirst({
+            where: { id: projectId, userId }
+        })
+
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' })
+        }
+
+        await prisma.project.delete({
+            where: { id: projectId }
+        })
+
+        res.json({ message: 'Project deleted successfully' })
+        
     } catch (error: any) {
         Sentry.captureException(error);
         res.status(500).json({ message: error.message });
