@@ -41,9 +41,8 @@ const Genetator = () => {
     e.preventDefault();
     if (!user) return toast("Please login to generate");
 
-    if (!productImage || !modelImage || !name || !productName) {
+    if (!productImage || !modelImage || !name || !productName || !aspectRatio)
       return toast("Please fill all the required fields");
-    }
 
     try {
       setIsGenerating(true);
@@ -61,9 +60,9 @@ const Genetator = () => {
 
       const { data } = await api.post("/api/project/create", formData, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
-      toast.success(data.message);
+      toast.success(data.message)
       navigate("/result/" + data.projectId);
     } catch (error: any) {
       setIsGenerating(false);

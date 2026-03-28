@@ -7,34 +7,38 @@ import { PrimaryButton } from '../components/Buttons';
 import api from '../configs/axios';
 import { useAuth } from '@clerk/clerk-react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 const MyGenerations = () => {
 
+  const {user, isLoaded} = useAuth();
+  const { getToken } = useAuth();
+  const navigate = useNavigate();
+
   const [generations, setGenerations] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
-  const { getToken } = useAuth();
 
   const fetchMyGenerations = async () => {
     try {
-      setLoading(true);
       const token = await getToken();
       const { data } = await api.get('/api/user/projects', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setGenerations(data.projects);
-    } catch (error: any) {
-      console.error(error);
-      toast.error(error.response?.data?.message || "Failed to fetch generations");
-    } finally {
       setLoading(false);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error.message);
+      console.error(error);
     }
   }
 
   useEffect(() => {
-    fetchMyGenerations()
-  }, [])
+    if(user){
+      fetchMyGenerations();
+    }else if(isLoaded && !user){
+      navigate('/')
+    }
+  }, [user])
 
   return loading ? (
     <div className="flex items-center justify-center min-h-screen">

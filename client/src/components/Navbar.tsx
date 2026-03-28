@@ -74,11 +74,9 @@ export default function Navbar() {
                     </div>
                 ) : (
                     <div className='flex gap-2'>
-                        <GhostButton
-                            onClick={() => navigate('/plans')}
-                            className='border-none text-gray-300 sm:py-1.5'
-                        >
-                            Credits:{ credits }
+                        <GhostButton onClick={() => navigate('/plans')}
+                            className='border-none text-gray-300 sm:py-1.5'>
+                                Credits:{ credits }
                         </GhostButton>
 
                         <UserButton>

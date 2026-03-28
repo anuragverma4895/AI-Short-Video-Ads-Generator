@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
 import type { Project } from "../types";
-import { dummyGenerations } from "../assets/assets";
 import { Loader2Icon } from "lucide-react";
 import ProjectCard from "../components/ProjectCard";
+import { data } from "react-router";
+import api from "../configs/axios";
 
 const Community = () => {
 
-  const [project, setProject] = useState<Project[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchProjects = async () => {
-    setTimeout(() => {
-      setProject(dummyGenerations);
+    try{
+      const { data } = await api.get('/api/project/published');
+      setProjects(data.projects);
       setLoading(false);
-    }, 3000)
+    }catch(error:any){
+      console.error(error?.response?.data?.message || error.message);
+      console.log(error);
+    }
   }
 
   useEffect(() => {
@@ -33,8 +38,8 @@ const Community = () => {
         </header>
 
         <div className="columns-1 sm:columns-2 lg:columns-3 gap-4">
-          {project.map((project) => (
-            <ProjectCard key={project.id} gen={project} setGenerations={setProject} forCommunity={true} />
+          {projects.map((project) => (
+            <ProjectCard key={project.id} gen={project} setGenerations={setProjects} forCommunity={true} />
           ))}
         </div>
 

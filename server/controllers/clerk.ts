@@ -50,11 +50,11 @@ const clerkWebhooks = async (req: Request, res: Response) => {
                 break;
             }
 
-            case 'billing.subscription.created':
-            case 'billing.subscription.updated': {
+            case 'subscription.created':
+            case 'subscription.updated': {
                 const credits = { pro: 80, premium: 240 }
                 const clerkUserId = data?.user_id;
-                const planId: keyof typeof credits = data?.plan?.slug;
+                const planId: keyof typeof credits = data?.subscription_items?.[0]?.plan?.slug || data?.plan?.slug;
 
                 if (planId === "pro" || planId === "premium") {
                     await prisma.user.update({
