@@ -71,7 +71,7 @@ export const createProject = async (req: Request, res: Response) => {
 
         tempProjectId = project.id;
 
-        const model = 'models/gemini-2.5-flash-image'
+        const model = 'models/gemini-1.5-flash'
         const generationConfig: GenerateContentConfig = {
             maxOutputTokens: 32768,
             temperature: 1,
@@ -227,8 +227,8 @@ export const createVideo = async (req: Request, res: Response) => {
             include: { user: true }
         })
 
-        if (!project || !project.isGenerating) {
-            return res.status(404).json({ message: 'Generation in progress' });
+        if (!project || project.isGenerating) {
+            return res.status(404).json({ message: 'Generation already in progress' });
         }
 
         if (project.generatedVideo) {
@@ -242,7 +242,7 @@ export const createVideo = async (req: Request, res: Response) => {
 
         const prompt = `make the person showcase the product which is ${project.productName} ${project.productDescription && `and Product Description: ${project.productDescription}`}`
 
-        const model = 'models/veo-3.1-generate-preview'
+        const model = 'models/gemini-1.5-pro'
 
         if (!project.generatedImage) {
             throw new Error('Generated image not found');
@@ -340,29 +340,6 @@ export const getAllPublishedProjects = async (req: Request, res: Response) => {
     }
 }
 
-// export const deleteProject = async (req: Request, res: Response) => {
-//     try {
-//         const { userId } = req.auth();
-//         const { projectId } = req.params;
-
-//         const project = await prisma.project.findUnique({
-//             where: { id: projectId, userId }
-//         })
-
-//         if (!project) {
-//             return res.status(404).json({ message: 'Project not found' })
-//         }
-
-//         await prisma.project.delete({
-//             where: { id: projectId }
-//         })
-
-//         res.json({ message: 'Project deleted successfully' })
-//     } catch (error: any) {
-//         Sentry.captureException(error);
-//         res.status(500).json({ message: error.message });
-//     }
-// }
 
 export const deleteProject = async (req: Request, res: Response) => {
     try {
