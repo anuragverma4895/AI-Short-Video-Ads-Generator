@@ -45,7 +45,7 @@
 
 1.  **Clone the repository**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/anuragverma4895/AI-Short-Video-Ads-Generator.git
     cd AI-Short-Video-Ads-Generator
     ```
 
@@ -57,7 +57,7 @@
     Create a `.env` file in the `server` directory with the following variables:
     ```env
     PORT=5000
-    GOOGLE_CLOUD_API_KEY=your_google_api_key
+    GOOGLE_CLOUD_API_KEY=[GCP_API_KEY]
     CLERK_SECRET_KEY=your_clerk_secret_key
     CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
     ```
