@@ -2,22 +2,36 @@ import { Request, Response } from 'express';
 import * as Sentry from "@sentry/node"
 import { prisma } from '../configs/prisma.js';
 
-// Get User Credits
+// Get User Credits (with Auto-Onboarding)
 export const getUserCredits = async (req: Request, res: Response) => {
     try {
         const { userId } = req.auth();
         if (!userId) { return res.status(401).json({ message: 'Unauthorized' }) }
 
-        const user = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { id: userId }
         })
 
-        res.json({ credits: user?.credits })
+        // Auto-Onboarding: Create user if they don't exist in our DB
+        if (!user) {
+            user = await prisma.user.create({
+                data: {
+                    id: userId,
+                    email: "", // Placeholder, will be updated by webhook if available
+                    name: "New User",
+                    image: "",
+                    credits: 20
+                }
+            })
+        }
+
+        res.json({ credits: user.credits })
     } catch (error: any) {
         Sentry.captureException(error);
         res.status(500).json({ message: error.code || error.message })
     }
 }
+
 
 //  Const get all User Porjects
 export const getAllProjects = async (req: Request, res: Response) => {

@@ -262,11 +262,24 @@ export const createProject = async (req: Request, res: Response) => {
         return res.status(400).json({ message: 'Please provide at least 2 images' })
     }
 
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
         where: { id: userId },
     })
 
-    if (!user || user.credits < 5) {
+    // Auto-Onboarding
+    if (!user) {
+        user = await prisma.user.create({
+            data: {
+                id: userId,
+                email: "", 
+                name: "New User",
+                image: "",
+                credits: 20
+            }
+        })
+    }
+
+    if (user.credits < 5) {
         return res.status(401).json({ message: 'Insufficient credits' })
     } else {
         await prisma.user.update({
@@ -276,6 +289,7 @@ export const createProject = async (req: Request, res: Response) => {
             isCreditDeducted = true;
         });
     }
+
 
     try {
 
@@ -476,13 +490,27 @@ export const createVideo = async (req: Request, res: Response) => {
     const { projectId } = req.body;
     let isCreditDeducted = false;
 
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
         where: { id: userId }
     });
 
-    if (!user || user.credits < 10) {
+    // Auto-Onboarding
+    if (!user) {
+        user = await prisma.user.create({
+            data: {
+                id: userId,
+                email: "",
+                name: "New User",
+                image: "",
+                credits: 20
+            }
+        })
+    }
+
+    if (user.credits < 10) {
         return res.status(401).json({ message: 'Insufficient credits' });
     }
+
 
     // deduct credits for video generation
     await prisma.user.update({
