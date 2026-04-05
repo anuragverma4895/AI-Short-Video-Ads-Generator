@@ -1,0 +1,19 @@
+{
+  "name": "ai-short-video-ads-generator",
+  "version": "1.0.0",
+  "main": "server/dist/server.js",
+  "type": "module",
+  "scripts": {
+    "render-build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server && npm run build --prefix server",
+    "build": "npm run render-build",
+    "render-start": "node index.js",
+    "start": "node index.js",
+
+    "client": "npm run dev --prefix client",
+    "server": "npm run dev --prefix server",
+    "dev": "concurrently \"npm run client\" \"npm run server\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -5,10 +5,15 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "tsx server.ts",
+    "start": "node dist/server.js",
+    "dev": "tsx server.ts",
     "server": "nodemon --exec tsx server.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "postinstall": "prisma generate --schema=./prisma/schema.prisma",
+    "test:modelslab": "node testModelsLab.js",
+    "test:bytez": "node testBytez.js"
   },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -19,6 +24,7 @@
     "@prisma/client": "^7.5.0",
     "@sentry/node": "^10.43.0",
     "axios": "^1.13.6",
+    "bytez.js": "^3.0.0",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
