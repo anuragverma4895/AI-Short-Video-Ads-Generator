@@ -5,7 +5,8 @@ import { useEffect } from 'react';
 import ProjectCard from '../components/ProjectCard';
 import { PrimaryButton } from '../components/Buttons';
 import api from '../configs/axios';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, useUser } from '@clerk/clerk-react';
+
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 

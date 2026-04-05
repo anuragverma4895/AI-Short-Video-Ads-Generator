@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Project } from "../types";
 import { Loader2Icon } from "lucide-react";
 import ProjectCard from "../components/ProjectCard";
-import { data } from "react-router";
+
 import api from "../configs/axios";
 
 const Community = () => {

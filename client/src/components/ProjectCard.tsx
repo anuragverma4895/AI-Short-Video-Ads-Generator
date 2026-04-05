@@ -2,8 +2,8 @@ import type React from "react"
 import type { Project } from "../types"
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { DivideCircle, EllipsisIcon, ImageIcon, Loader2Icon, PlaySquareIcon, Share2Icon, Trash2Icon } from "lucide-react";
-import { text } from "framer-motion/client";
+import { EllipsisIcon, ImageIcon, Loader2Icon, PlaySquareIcon, Share2Icon, Trash2Icon } from "lucide-react";
+
 import { GhostButton } from "./Buttons";
 import { PrimaryButton } from "./Buttons";
 import { useAuth } from "@clerk/clerk-react";
