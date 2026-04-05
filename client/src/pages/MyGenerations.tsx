@@ -11,8 +11,9 @@ import { useNavigate } from 'react-router-dom';
 
 const MyGenerations = () => {
 
-  const {user, isLoaded} = useAuth();
+  const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
+
   const navigate = useNavigate();
 
   const [generations, setGenerations] = useState<Project[]>([])

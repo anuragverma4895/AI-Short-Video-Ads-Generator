@@ -41,7 +41,8 @@ const Result = () => {
       const { data } = await api.post('/api/project/video', {projectId}, {
         headers: { Authorization: `Bearer ${token}`}
       });
-      setProjectData(prev => ({ ...prev, generatedVideo: data.videoUrl, isGenerating: false}))
+      setProjectData((prev: Project) => ({ ...prev, generatedVideo: data.videoUrl, isGenerating: false}))
+
 
       toast.success(data.message);
       setIsGenerating(false);

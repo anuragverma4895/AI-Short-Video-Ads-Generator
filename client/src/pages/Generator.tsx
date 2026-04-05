@@ -171,7 +171,8 @@ const Generator = () => {
                 id="UserPrompt"
                 rows={4}
                 value={userPrompt}
-                onChange={(e) => setUserPrompt(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUserPrompt(e.target.value)}
+
                 placeholder="Describe how you want the narration to be."
                 className="w-full bg-white/3 rounded-lg border-2 p-4 text-sm border-violet-200/10 focus:border-violet-500/50 outline-none resize-none transition-all"
               />
