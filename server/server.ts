@@ -54,7 +54,8 @@ if (NODE_ENV === "production") {
   const distPath = path.join(__dirname, "../../client/dist");
   app.use(express.static(distPath));
 
-  app.get("/*", (req: Request, res: Response) => {
+  app.get("/:path*", (req: Request, res: Response) => {
+
 
     res.sendFile(path.resolve(distPath, "index.html"));
   });
