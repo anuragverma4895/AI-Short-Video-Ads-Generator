@@ -25,7 +25,14 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
     : [];
 
 app.use(cors({
-    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+    origin: (origin, callback) => {
+        // Allow same-origin (no origin) and development/localhost
+        if (!origin || NODE_ENV === 'development' || allowedOrigins.includes(origin) || origin.includes('.onrender.com')) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
 }));
 
