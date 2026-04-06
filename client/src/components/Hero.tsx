@@ -1,6 +1,7 @@
 import { ArrowRightIcon, PlayIcon, ZapIcon, CheckIcon } from 'lucide-react';
 import { PrimaryButton, GhostButton } from './Buttons';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 export default function Hero() {
 
@@ -91,17 +92,19 @@ export default function Hero() {
                                 viewport={{ once: true }}
                                 transition={{ type: "spring", stiffness: 250, damping: 70, mass: 1, delay: 0.3 }}
                             >
-                                <a href="/" className="w-full sm:w-auto">
+                                <Link to="/generate" className="w-full sm:w-auto">
                                     <PrimaryButton className="max-sm:w-full py-3 px-7">
                                         Start generating - it's free
                                         <ArrowRightIcon className="size-4" />
                                     </PrimaryButton>
-                                </a>
+                                </Link>
 
-                                <GhostButton className="max-sm:w-full max-sm:justify-center py-3 px-5">
-                                    <PlayIcon className="size-4" />
-                                    Watch demo
-                                </GhostButton>
+                                <Link to="/community" className="w-full sm:w-auto">
+                                    <GhostButton className="max-sm:w-full max-sm:justify-center py-3 px-5">
+                                        <PlayIcon className="size-4" />
+                                        Watch demo
+                                    </GhostButton>
+                                </Link>
                             </motion.div>
 
                             <motion.div className="flex sm:inline-flex overflow-hidden items-center max-sm:justify-center text-sm text-gray-200 bg-white/10 rounded"

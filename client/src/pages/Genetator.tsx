@@ -1,5 +1,3 @@
-// This file was a typo duplicate and has been disabled to prevent build errors.
-// Please use Generator.tsx instead.
-export default function Genetator() {
-  return null;
-}
+// This file has been neutralized to prevent duplicate/typo errors.
+// It should be deleted manually from the filesystem: client/src/pages/Genetator.tsx
+export default function Genetator() { return null; }
