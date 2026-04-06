@@ -22,10 +22,10 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',') 
-    : ['http://localhost:5173'];
+    : [];
 
 app.use(cors({
-    origin: NODE_ENV === 'production' ? allowedOrigins : true,
+    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
     credentials: true,
 }));
 
