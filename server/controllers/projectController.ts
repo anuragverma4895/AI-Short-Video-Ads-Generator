@@ -337,7 +337,7 @@ export const createProject = async (req: Request, res: Response) => {
             console.error('Bytez image generation failed:', bytezError?.message || bytezError);
         }
 
-        const model = 'gemini-1.5-flash-latest'
+        const model = 'models/gemini-1.5-flash'
         const generationConfig: GenerateContentConfig = {
             maxOutputTokens: 32768,
             temperature: 1,
@@ -559,7 +559,7 @@ export const createVideo = async (req: Request, res: Response) => {
 
         const prompt = `make the person showcase the product which is ${project.productName} ${project.productDescription && `and Product Description: ${project.productDescription}`}`
 
-        const model = 'gemini-1.5-flash-latest'
+        const model = 'models/gemini-1.5-pro'
 
         if (!project.generatedImage) {
             throw new Error('Generated image not found');
