@@ -9,9 +9,7 @@
     "dev": "tsx server.ts",
     "server": "nodemon --exec tsx server.ts",
     "build": "tsc",
-    "postinstall": "prisma generate --schema=./prisma/schema.prisma",
-    "test:modelslab": "node testModelsLab.js",
-    "test:bytez": "node testBytez.js"
+    "postinstall": "prisma generate --schema=./prisma/schema.prisma"
   },
 
   "keywords": [],
@@ -24,12 +22,10 @@
     "@gradio/client": "^1.5.0",
     "@sentry/node": "^10.43.0",
     "axios": "^1.13.6",
-    "bytez.js": "^3.0.0",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "groq-sdk": "^0.13.0",
     "multer": "^2.1.1",
     "pg": "^8.20.0"
   },
