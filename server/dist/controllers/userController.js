@@ -1,33 +1,28 @@
-import { clerkClient } from '@clerk/express';
 import * as Sentry from "@sentry/node";
 import { prisma } from '../configs/prisma.js';
-const ensureUserExists = async (userId) => {
-    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
-    if (existingUser)
-        return existingUser;
-    const clerkUser = await clerkClient.users.getUser(userId);
-    const fallbackEmail = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@no-email.local`;
-    const firstName = clerkUser.firstName || '';
-    const lastName = clerkUser.lastName || '';
-    const fullName = `${firstName} ${lastName}`.trim() || clerkUser.username || 'User';
-    return prisma.user.create({
-        data: {
-            id: userId,
-            email: fallbackEmail,
-            name: fullName,
-            image: clerkUser.imageUrl || '',
-        }
-    });
-};
-// Get User Credits
+// Get User Credits (with Auto-Onboarding)
 export const getUserCredits = async (req, res) => {
     try {
         const { userId } = req.auth();
         if (!userId) {
             return res.status(401).json({ message: 'Unauthorized' });
         }
-        const user = await ensureUserExists(userId);
-        res.json({ credits: user?.credits ?? 0 });
+        let user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+        // Auto-Onboarding: Create user if they don't exist in our DB
+        if (!user) {
+            user = await prisma.user.create({
+                data: {
+                    id: userId,
+                    email: "", // Placeholder, will be updated by webhook if available
+                    name: "New User",
+                    image: "",
+                    credits: 20
+                }
+            });
+        }
+        res.json({ credits: user.credits });
     }
     catch (error) {
         Sentry.captureException(error);

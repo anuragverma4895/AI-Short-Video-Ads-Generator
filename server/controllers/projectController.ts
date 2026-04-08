@@ -76,90 +76,82 @@ export const createProject = async (req: Request, res: Response) => {
         tempProjectId = project.id;
         let generatedImageUrl = "";
 
-        console.log("Connecting to Gemini API Pool...");
+        console.log("Connecting to Gemini API Pool for Smart Ad Composition...");
         try {
-            // Attempt Generation using Gemini with Multiple Images
-            const personImgUrl = uploadedImages[0];
-            const garmentImgUrl = uploadedImages[1];
+            const img1 = uploadedImages[0];
+            const img2 = uploadedImages[1];
             
-            // Fetch images and convert to base64
-            const personResponse = await axios.get(personImgUrl, { responseType: 'arraybuffer' });
-            const garmentResponse = await axios.get(garmentImgUrl, { responseType: 'arraybuffer' });
+            // Fetch images and convert to base64 for Gemini Vision
+            const r1 = await axios.get(img1, { responseType: 'arraybuffer' });
+            const r2 = await axios.get(img2, { responseType: 'arraybuffer' });
 
-            const personBase64 = Buffer.from(personResponse.data, 'binary').toString('base64');
-            const garmentBase64 = Buffer.from(garmentResponse.data, 'binary').toString('base64');
+            const b1 = Buffer.from(r1.data, 'binary').toString('base64');
+            const b2 = Buffer.from(r2.data, 'binary').toString('base64');
 
             const ai = new GoogleGenAI({ apiKey: getRandomGeminiKey() });
 
-            // Using the user's setup for Nano Banana 2 (mixing reference images)
-            const promptText = `A photorealistic image showing this person wearing or using this product: ${productName}. ${productDescription}. Make it look like a high-end commercial photo.`;
-
-            const contents = [
-                { text: promptText },
-                {
-                    inlineData: {
-                        mimeType: "image/jpeg",
-                        data: personBase64,
-                    },
-                },
-                {
-                    inlineData: {
-                        mimeType: "image/jpeg",
-                        data: garmentBase64,
-                    },
-                }
-            ];
+            // Ask Gemini to classify Person vs Product and generate a Slogan
+            const promptContent = `I am providing two images. One is a human model/person, and the other is a product (e.g. luggage, clothing, accessory). The product name is "${productName}". 
+Analyze them and return a pure JSON object (do not wrap in markdown \`\`\`json). The JSON must be exactly:
+{
+  "personImageUrl": "<url of the person image>",
+  "productImageUrl": "<url of the product image>",
+  "adSlogan": "<A catchy, short 3-word UPPERCASE advertising slogan for this product>"
+}
+Use exactly these two URLs to fill the JSON:
+URL A: ${img1}
+URL B: ${img2}`;
 
             const result = await ai.models.generateContent({
-                model: 'gemini-3.1-flash-image-preview',
-                contents: contents as any,
+                model: 'gemini-2.0-flash',
+                contents: [
+                    { text: promptContent },
+                    { inlineData: { mimeType: "image/jpeg", data: b1 } },
+                    { inlineData: { mimeType: "image/jpeg", data: b2 } }
+                ] as any,
                 config: {
-                    responseModalities: ['IMAGE'],
+                    responseMimeType: "application/json"
                 }
             });
 
+            // Parse Gemini Response
             const parts = result.candidates?.[0]?.content?.parts || [];
-            let imagePart = parts.find((p: any) => p.inlineData);
+            let rawJson = parts.map((p: any) => p.text).join("") || "{}";
+            const analysis = JSON.parse(rawJson);
+
+            const bgPersonUrl = analysis.personImageUrl || img1;
+            const fgProductUrl = analysis.productImageUrl || img2;
+            const sloganText = analysis.adSlogan || productName.toUpperCase();
             
-            if (imagePart && imagePart.inlineData) {
-                const base64Data = imagePart.inlineData.data;
-                const buffer = Buffer.from(base64Data, "base64");
-                
-                // Upload this buffer to cloudinary
-                const uploadResult = await new Promise<any>((resolve, reject) => {
-                    const uploadStream = cloudinary.uploader.upload_stream(
-                        { resource_type: 'image' },
-                        (error, result) => {
-                            if (error) reject(error);
-                            else resolve(result);
-                        }
-                    );
-                    uploadStream.end(buffer);
-                });
-                generatedImageUrl = uploadResult.secure_url;
-                console.log("Successfully generated image via Gemini API Pool:", generatedImageUrl);
-            } else {
-                throw new Error("Gemini API returned no image part.");
-            }
+            // Extract Cloudinary Public IDs
+            const bgPublicId = bgPersonUrl.split('/').pop()?.split('.')[0] || '';
+            const fgPublicId = fgProductUrl.split('/').pop()?.split('.')[0] || '';
 
-        } catch (vtonError: any) {
-            console.error('IDM-VTON Generation Failed:', vtonError.message);
-            console.log('Using Cloudinary Fallback for Composition...');
-            const personImg = uploadedImages[0];
-            const productImg = uploadedImages[1].split('/').pop()?.split('.')[0];
+            // Smart Compose with Cloudinary Layering
+            const cloudinaryFinalUrl = cloudinary.url(bgPublicId, {
+                transformation: [
+                    // Background layer (Person) filled
+                    { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
+                    
+                    // Ad Slogan Layer
+                    { overlay: { font_family: "Arial", font_size: 100, font_weight: "bold", text: sloganText }, color: "white" },
+                    { flags: 'layer_apply', gravity: "north", y: 200 },
+                    
+                    // Foreground Product Layer
+                    { overlay: fgPublicId },
+                    { effect: 'make_transparent:20', color: 'white' },
+                    { width: 650, crop: 'scale' },
+                    { flags: 'layer_apply', gravity: 'south', y: 150 }
+                ]
+            });
+            
+            const finalUpload = await cloudinary.uploader.upload(cloudinaryFinalUrl, { resource_type: 'image' });
+            generatedImageUrl = finalUpload.secure_url;
+            console.log("Successfully generated Composed Ad via Gemini+Cloudinary:", generatedImageUrl);
 
-            if (productImg) {
-                const fallbackUrl = cloudinary.url(uploadedImages[0].split('/').pop()?.split('.')[0] || '', {
-                    transformation: [
-                        { width: 1024, height: 1024, crop: 'limit' },
-                        { overlay: productImg, width: 300, gravity: 'south_east', x: 20, y: 20 }
-                    ]
-                });
-                const finalUpload = await cloudinary.uploader.upload(fallbackUrl, { resource_type: 'image' });
-                generatedImageUrl = finalUpload.secure_url;
-            } else {
-                generatedImageUrl = uploadedImages[0];
-            }
+        } catch (error: any) {
+            console.error('Ad Generation Failed:', error.message);
+            throw new Error(`Composite Failed: ${error.message}`);
         }
 
         await prisma.project.update({

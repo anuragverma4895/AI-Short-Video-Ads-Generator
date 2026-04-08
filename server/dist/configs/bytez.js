@@ -1,14 +1,12 @@
 import Bytez from 'bytez.js';
-let cachedApiKey;
-let cachedClient = null;
+let bytezClient = null;
 export const getBytezClient = () => {
-    const apiKey = process.env.BYTEZ_API_KEY?.trim();
-    if (!apiKey) {
+    if (!process.env.BYTEZ_API_KEY) {
         return null;
     }
-    if (!cachedClient || cachedApiKey !== apiKey) {
-        cachedApiKey = apiKey;
-        cachedClient = new Bytez(apiKey);
+    if (!bytezClient) {
+        bytezClient = new Bytez(process.env.BYTEZ_API_KEY);
     }
-    return cachedClient;
+    return bytezClient;
 };
+export default getBytezClient;
