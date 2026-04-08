@@ -21,6 +21,7 @@
     "@clerk/express": "^2.0.4",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
+    "@gradio/client": "^1.5.0",
     "@sentry/node": "^10.43.0",
     "axios": "^1.13.6",
     "bytez.js": "^3.0.0",
