@@ -47,6 +47,26 @@ const ProjectCard = ({ gen, setGenerations, forCommunity = false }: { gen: Proje
     }
    }
 
+   const handleDownload = async (url: string | undefined, type: 'image' | 'video') => {
+       if (!url) return;
+       try {
+           const toastId = toast.loading("Downloading...");
+           const res = await fetch(url);
+           const blob = await res.blob();
+           const blobUrl = window.URL.createObjectURL(blob);
+           const a = document.createElement('a');
+           a.style.display = 'none';
+           a.href = blobUrl;
+           a.download = `product-${type}-${Date.now()}.${type === 'video' ? 'mp4' : 'png'}`;
+           document.body.appendChild(a);
+           a.click();
+           window.URL.revokeObjectURL(blobUrl);
+           toast.dismiss(toastId);
+       } catch (error) {
+           toast.error("Failed to download file");
+       }
+   };
+
     return(
         <div key={gen.id} className="mb-4 break-inside-avoid">
             <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition group">
@@ -90,14 +110,14 @@ const ProjectCard = ({ gen, setGenerations, forCommunity = false }: { gen: Proje
                                 <ul className={`text-xs ${menuOpen ? 'block' : 'hidden'} overflow-hidden right-0 peer-focus:block hover:block w-40 bg-black/50 backdrop-blur text-white border border-gray-500/50 rounded-lg shadow-md mt-2 py-1 z-10`}>
 
                                     {gen.generatedImage &&
-                                    <a href={gen.generatedImage} download className="flex gap-2 items-center px-4 py-2 hover:bg-black/10 cursor-pointer">
+                                    <button onClick={() => handleDownload(gen.generatedImage, 'image')} className="w-full flex gap-2 items-center px-4 py-2 hover:bg-black/10 cursor-pointer">
                                         <ImageIcon size={14} /> Download Image
-                                    </a>}
+                                    </button>}
 
                                     {gen.generatedVideo &&
-                                    <a href={gen.generatedVideo} download className="flex gap-2 items-center px-4 py-2 hover:bg-black/10 cursor-pointer">
+                                    <button onClick={() => handleDownload(gen.generatedVideo, 'video')} className="w-full flex gap-2 items-center px-4 py-2 hover:bg-black/10 cursor-pointer">
                                         <PlaySquareIcon size={14} /> Download Video
-                                    </a>}
+                                    </button>}
 
                                     {(gen.generatedVideo || gen.generatedImage) &&
                                     <button onClick={()=> navigator.share({url: gen.generatedVideo || gen.generatedImage, title: gen.productName, text: gen.productDescription})} className="w-full flex gap-2 items-center px-4 py-2 hover:bg-black/10 cursor-pointer">

@@ -53,6 +53,27 @@ const Result = () => {
     }
   }
 
+  const handleDownload = async (url: string | undefined, type: 'image' | 'video') => {
+      if (!url) return;
+      try {
+          const toastId = toast.loading("Downloading...");
+          const res = await fetch(url);
+          const blob = await res.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = blobUrl;
+          a.download = `product-${type}-${Date.now()}.${type === 'video' ? 'mp4' : 'png'}`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(blobUrl);
+          toast.dismiss(toastId);
+          toast.success("Download started");
+      } catch (error) {
+          toast.error("Failed to download file");
+      }
+  }
+
   useEffect(()=>{
     if(user && !project.id){
       fetchProjectData()
@@ -108,17 +129,13 @@ const Result = () => {
             <div className="glass-panel p-6 rounded-2xl">
               <h3 className="text-xl font-semibold mb-4">Actions</h3>
               <div className="flex flex-col gap-3">
-                <a href={project.generatedImage} download>
-                  <GhostButton disabled={!project.generatedImage} className="w-full justify-center rounded-md py-3 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <ImageIcon className="size-4.5" /> Download Image
-                  </GhostButton>
-                </a>
+                <GhostButton onClick={() => handleDownload(project.generatedImage, 'image')} disabled={!project.generatedImage} className="w-full justify-center rounded-md py-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <ImageIcon className="size-4.5" /> Download Image
+                </GhostButton>
 
-                <a href={project.generatedVideo} download>
-                  <GhostButton disabled={!project.generatedVideo} className="w-full justify-center rounded-md py-3 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <VideoIcon className="size-4.5" /> Download Video
-                  </GhostButton>
-                </a>
+                <GhostButton onClick={() => handleDownload(project.generatedVideo, 'video')} disabled={!project.generatedVideo} className="w-full justify-center rounded-md py-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <VideoIcon className="size-4.5" /> Download Video
+                </GhostButton>
               </div>
             </div>
 

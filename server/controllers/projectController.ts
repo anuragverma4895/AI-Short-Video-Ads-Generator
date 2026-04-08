@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import * as Sentry from "@sentry/node"
 import { prisma } from '../configs/prisma.js';
 import { v2 as cloudinary } from 'cloudinary';
-import { GenerateContentConfig, HarmBlockThreshold, HarmCategory } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import { getBytezClient } from '../configs/bytez.js';
@@ -337,119 +336,55 @@ export const createProject = async (req: Request, res: Response) => {
             console.error('Bytez image generation failed:', bytezError?.message || bytezError);
         }
 
-        const model = 'models/gemini-1.5-flash'
-        const generationConfig: GenerateContentConfig = {
-            maxOutputTokens: 32768,
-            temperature: 1,
-            topP: 0.95,
-            responseModalities: ['IMAGE'],
-            imageConfig: {
-                aspectRatio: aspectRatio || '9:16', imageSize: '1K'
-            },
-            safetySettings: [
-                {
-                    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                    threshold: HarmBlockThreshold.OFF
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                    threshold: HarmBlockThreshold.OFF,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                    threshold: HarmBlockThreshold.OFF,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-                    threshold: HarmBlockThreshold.OFF,
-                },
-            ]
-        }
-
-        // image to base64 structure for ai model
-        const img1base64 = loadImage(images[0].path, images[0].mimetype);
-        const img2base64 = loadImage(images[1].path, images[1].mimetype);
-
-        const prompt = {
-            text: `Combine the person and product into a realistic photo. Make the person naturally hold or use the product. Match lighting, shadows, scale and perspective. Make the person stand in professional studio lighting. Output ecommerce-quality photo realistic imagery.
-            ${userPrompt}`
-        }
-
         let uploadResult;
         try {
-            const resolvedKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_CLOUD_API_KEY;
-            const modelslabKey = process.env.MODELSLAB_API_KEY || (!isGeminiKey(resolvedKey) ? resolvedKey : undefined);
-            const forceModelsLab = process.env.IMAGE_PROVIDER?.toLowerCase() === 'modelslab';
-
-            if ((forceModelsLab || !isGeminiKey(resolvedKey)) && modelslabKey) {
-                const generatedUrl = await generateImageWithModelsLab(
-                    modelslabKey,
-                    uploadedImages,
-                    userPrompt,
-                    productName,
-                    productDescription,
-                    aspectRatio,
-                );
-
-                uploadResult = { secure_url: generatedUrl };
-            } else {
-                // Generate the image using Gemini when a valid Gemini key is configured
-                const response: any = await ai.models.generateContent({
-                    model,
-                    contents: [img1base64, img2base64, prompt],
-                    config: generationConfig,
-                })
-
-                // Check if the response is valid
-                if (!response?.candidates?.[0]?.content?.parts) {
-                    if (response?.error?.code === 429 && response?.error?.message?.includes('limit: 0')) {
-                        throw new Error('BILLING_REQUIRED')
-                    }
-                    throw new Error(response?.error?.message || 'Unexpected response from AI model')
+            // First try Groq to generate a highly detailed prompt
+            let finalImagePrompt = `Professional premium ecommerce ad photo for ${productName}. ${productDescription || ''} ${userPrompt || ''}`;
+            try {
+                const completion = await ai.chat.completions.create({
+                    messages: [
+                        { role: 'system', content: 'You are an elite ecommerce prompt engineer. Write a stable diffusion image prompt. Output ONLY the raw prompt, no intro or outro text, no quotation marks.' },
+                        { role: 'user', content: `Product: ${productName}. Description: ${productDescription}. Focus: ${userPrompt}. Create an actionable, realistic image generation prompt combining person and product.` }
+                    ],
+                    model: 'llama3-8b-8192',
+                });
+                if (completion.choices[0]?.message?.content) {
+                    finalImagePrompt = completion.choices[0].message.content.trim();
+                    console.log("[Groq Prompt Generated]:", finalImagePrompt);
                 }
-
-                const parts = response.candidates[0].content.parts;
-                let finalBuffer: Buffer | null = null
-                for (const part of parts) {
-                    if (part.inlineData) {
-                        finalBuffer = Buffer.from(part.inlineData.data, 'base64')
-                    }
-                }
-
-                if (!finalBuffer) {
-                    throw new Error('Failed to generate image');
-                }
-
-                const base64Image = `data:image/png;base64,${finalBuffer.toString('base64')}`
-                uploadResult = await cloudinary.uploader.upload(base64Image, { resource_type: 'image' });
+            } catch (groqError: any) {
+                console.error('Groq prompt generation failed (falling back to default text):', groqError.message);
             }
+
+            // Fetch resulting Image from Pollinations AI (Free Limitless Engine)
+            console.log("Generating Image via Pollinations based on Groq Prompt...");
+            const encodedPrompt = encodeURIComponent(finalImagePrompt.slice(0, 900));
+            const pollUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 10000)}`;
+            
+            const imageResponse = await axios.get(pollUrl, { responseType: 'arraybuffer' });
+            const finalBuffer = Buffer.from(imageResponse.data);
+            const base64Image = `data:image/png;base64,${finalBuffer.toString('base64')}`;
+            uploadResult = await cloudinary.uploader.upload(base64Image, { resource_type: 'image' });
 
         } catch (genError: any) {
             console.error('Image Generation Failed:', genError.message);
             
             // FALLBACK: Use Cloudinary to combine images if AI fails
-            // This is a "Direct API" solution using Cloudinary's overlay feature
-            if (shouldUseImageFallback(genError)) {
-                console.log('Using Cloudinary Fallback...');
-                // We'll use the first image as base and overlay the second one
-                // This makes the project "work" without Gemini quota
-                const personImg = uploadedImages[0];
-                const productImg = uploadedImages[1].split('/').pop()?.split('.')[0]; // get public id
+            console.log('Using Cloudinary Fallback...');
+            const personImg = uploadedImages[0];
+            const productImg = uploadedImages[1].split('/').pop()?.split('.')[0]; // get public id
 
-                if (productImg) {
-                    uploadResult = {
-                         secure_url: cloudinary.url(uploadedImages[0].split('/').pop()?.split('.')[0] || '', {
-                            transformation: [
-                                { width: 1024, height: 1024, crop: 'limit' },
-                                { overlay: productImg, width: 300, gravity: 'south_east', x: 20, y: 20 }
-                            ]
-                        })
-                    };
-                } else {
-                    uploadResult = { secure_url: uploadedImages[0] };
-                }
+            if (productImg) {
+                uploadResult = {
+                     secure_url: cloudinary.url(uploadedImages[0].split('/').pop()?.split('.')[0] || '', {
+                        transformation: [
+                            { width: 1024, height: 1024, crop: 'limit' },
+                            { overlay: productImg, width: 300, gravity: 'south_east', x: 20, y: 20 }
+                        ]
+                    })
+                };
             } else {
-                throw genError;
+                uploadResult = { secure_url: uploadedImages[0] };
             }
         }
 
@@ -557,71 +492,9 @@ export const createVideo = async (req: Request, res: Response) => {
             console.error('Bytez video generation failed:', bytezError?.message || bytezError);
         }
 
-        const prompt = `make the person showcase the product which is ${project.productName} ${project.productDescription && `and Product Description: ${project.productDescription}`}`
-
-        const model = 'models/gemini-1.5-pro'
-
-        if (!project.generatedImage) {
-            throw new Error('Generated image not found');
-        }
-
-        const image = await axios.get(project.generatedImage, { responseType: 'arraybuffer', });
-        const imageBytes: any = Buffer.from(image.data);
-
-        let operation: any = await ai.models.generateVideos({
-            model,
-            prompt,
-            image: {
-                imageBytes: imageBytes.toString('base64'),
-                mimeType: 'image/png',
-            },
-            config: {
-                aspectRatio: project?.aspectRatio || '9:16',
-                numberOfVideos: 1,
-                resolution: '720p',
-            }
-        })
-
-        while (!operation.done) {
-            console.log('Waiting for video generation to complete ... ');
-            await new Promise((resolve) => setTimeout(resolve, 10000));
-            operation = await ai.operations.getVideosOperation({
-                operation: operation,
-            })
-        }
-        const filename = `${userId}-${Date.now()}.mp4`;
-        const videosDir = path.resolve('videos');
-        const filePath = path.join(videosDir, filename);
-
-        // Create the videos directory if it doesn't exist
-        fs.mkdirSync(videosDir, { recursive: true });
-
-        if (!operation.response.generatedVideos) {
-            throw new Error(operation.response.raiMediaFilteredReasons[0])
-        }
-
-        // Download the video.
-        await ai.files.download({
-            file: operation.response.generatedVideos[0].video,
-            downloadPath: filePath,
-        })
-
-        const uploadResult = await cloudinary.uploader.upload(filePath, {
-            resource_type: 'video'
-        })
-
-        await prisma.project.update({
-            where: { id: projectId },
-            data: {
-                generatedVideo: uploadResult.secure_url,
-                isGenerating: false
-            }
-        })
-
-        // remove video file from disk after upload
-        fs.unlinkSync(filePath);
-
-        res.json({ message: 'Video generation completed', videoUrl: uploadResult.secure_url })
+        // Use Groq + Proxy / Fallback for Video
+        // Because Groq is an LLM engine and Pollinations does not support video natively, we throw a fallback alert.
+        throw new Error('Groq SDK is configured but does not native support Video generation. Please configure Bytez logic in ENV.');
 
     } catch (error: any) {
 
