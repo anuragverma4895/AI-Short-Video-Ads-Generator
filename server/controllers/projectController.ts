@@ -6,7 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { Client } from '@gradio/client';
-
+import { GoogleGenAI } from '@google/genai';
+import { getRandomGeminiKey } from '../utils/apiPool.js';
 
 
 export const createProject = async (req: Request, res: Response) => {
@@ -75,38 +76,71 @@ export const createProject = async (req: Request, res: Response) => {
         tempProjectId = project.id;
         let generatedImageUrl = "";
 
-        console.log("Connecting to Gradio IDM-VTON Space...");
+        console.log("Connecting to Gemini API Pool...");
         try {
-            // Attempt Virtual Try-On using IDM-VTON free space
+            // Attempt Generation using Gemini with Multiple Images
             const personImgUrl = uploadedImages[0];
             const garmentImgUrl = uploadedImages[1];
             
-            // Using handle_file-like approach by fetching as blob
-            const personResponse = await axios.get(personImgUrl, { responseType: 'blob' });
-            const garmentResponse = await axios.get(garmentImgUrl, { responseType: 'blob' });
+            // Fetch images and convert to base64
+            const personResponse = await axios.get(personImgUrl, { responseType: 'arraybuffer' });
+            const garmentResponse = await axios.get(garmentImgUrl, { responseType: 'arraybuffer' });
 
-            const client = await Client.connect("yisol/IDM-VTON");
-            const result = await client.predict("/tryon", {
-                dict: personResponse.data,
-                garm_img: garmentResponse.data,
-                garment_des: `${productName} ${productDescription}`,
-                is_checked: true,
-                is_checked_crop: false,
-                denoise_steps: 30,
-                seed: Math.floor(Math.random() * 100000)
+            const personBase64 = Buffer.from(personResponse.data, 'binary').toString('base64');
+            const garmentBase64 = Buffer.from(garmentResponse.data, 'binary').toString('base64');
+
+            const ai = new GoogleGenAI({ apiKey: getRandomGeminiKey() });
+
+            // Using the user's setup for Nano Banana 2 (mixing reference images)
+            const promptText = `A photorealistic image showing this person wearing or using this product: ${productName}. ${productDescription}. Make it look like a high-end commercial photo.`;
+
+            const contents = [
+                { text: promptText },
+                {
+                    inlineData: {
+                        mimeType: "image/jpeg",
+                        data: personBase64,
+                    },
+                },
+                {
+                    inlineData: {
+                        mimeType: "image/jpeg",
+                        data: garmentBase64,
+                    },
+                }
+            ];
+
+            const result = await ai.models.generateContent({
+                model: 'gemini-3.1-flash-image-preview',
+                contents: contents as any,
+                config: {
+                    responseModalities: ['IMAGE'],
+                }
             });
 
-            const outputData: any = result?.data;
-            if (outputData && outputData.length > 0) {
-                 // Huggingface space returns URL or FileData object
-                 generatedImageUrl = typeof outputData[0] === 'string' ? outputData[0] : outputData[0]?.url;
+            const parts = result.candidates?.[0]?.content?.parts || [];
+            let imagePart = parts.find((p: any) => p.inlineData);
+            
+            if (imagePart && imagePart.inlineData) {
+                const base64Data = imagePart.inlineData.data;
+                const buffer = Buffer.from(base64Data, "base64");
+                
+                // Upload this buffer to cloudinary
+                const uploadResult = await new Promise<any>((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(
+                        { resource_type: 'image' },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                    );
+                    uploadStream.end(buffer);
+                });
+                generatedImageUrl = uploadResult.secure_url;
+                console.log("Successfully generated image via Gemini API Pool:", generatedImageUrl);
+            } else {
+                throw new Error("Gemini API returned no image part.");
             }
-            if(!generatedImageUrl) throw new Error("Gradio client returned empty data");
-
-            // Upload to our cloudinary
-            const finalUpload = await cloudinary.uploader.upload(generatedImageUrl, { resource_type: 'image' });
-            generatedImageUrl = finalUpload.secure_url;
-            console.log("Successfully generated VTON image:", generatedImageUrl);
 
         } catch (vtonError: any) {
             console.error('IDM-VTON Generation Failed:', vtonError.message);
