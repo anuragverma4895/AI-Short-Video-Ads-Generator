@@ -14,7 +14,7 @@ export default function Navbar() {
     const { openSignIn, openSignUp } = useClerk()
     const [isOpen, setIsOpen] = useState(false);
 
-    const [credits, setCredits] = useState(0);
+    const [credits, setCredits] = useState<number | null>(null);
     const {pathname} = useLocation()
     const { getToken} = useAuth();
 
@@ -27,12 +27,13 @@ export default function Navbar() {
 
     const getUserCredits = async ()=>{
     try {
+        setCredits(null);
         const token = await getToken()
         const {data} = await api.get('/api/user/credits', {headers:{Authorization: `Bearer ${token}` }})
-        setCredits(data.credits)
+        setCredits(Number(data.credits) || 0)
         }catch (error: any) {
-            toast.error(error?.response?.data?.message || error.message)
-            // toast.error(error?.response?.data?.message || error.message)
+            setCredits(null);
+            toast.error(error?.response?.data?.message || 'Unable to load credits')
             console.log(error);
         }
     }
@@ -76,7 +77,7 @@ export default function Navbar() {
                     <div className='flex gap-2'>
                         <GhostButton onClick={() => navigate('/plans')}
                             className='border-none text-gray-300 sm:py-1.5'>
-                                Credits:{ credits }
+                                Credits:{ credits ?? '...' }
                         </GhostButton>
 
                         <UserButton>

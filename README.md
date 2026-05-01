@@ -70,7 +70,7 @@
     Create a `.env` file in the `client` directory with the following variables:
     ```env
     VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-    VITE_API_URL=http://localhost:5000
+    VITE_BASEURL=http://localhost:5000
     ```
 
 ### Running the Application
