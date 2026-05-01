@@ -1,7 +1,7 @@
 import { useState } from "react"
 import type { Project } from "../types"
 import { useEffect } from "react"
-import { ImageIcon, Loader2Icon, RefreshCwIcon, VideoIcon, SparkleIcon } from "lucide-react";
+import { AlertTriangleIcon, ImageIcon, Loader2Icon, RefreshCwIcon, VideoIcon, SparkleIcon } from "lucide-react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../configs/axios";
@@ -114,10 +114,19 @@ const Result = () => {
           <div className="lg:col-span-2 space-y-6">
             <div className="glass-panel inline-block p-2 rounded-2xl">
               <div className={`${project?.aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'} sm:max-h-[800px] rounded-xl bg-gray-900 overflow-hidden relative`}>
-                {project?.generatedVideo ? (
+                {project?.error ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-6 text-center text-red-200 bg-red-500/10">
+                    <AlertTriangleIcon className="size-9" />
+                    <p className="text-sm">{project.error}</p>
+                  </div>
+                ) : project?.generatedVideo ? (
                   <video src={project.generatedVideo} controls autoPlay loop className="w-full h-full object-cover" />
-                ) : (
+                ) : project?.generatedImage ? (
                   <img src={project.generatedImage} alt="Generated Result" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <Loader2Icon className="animate-spin size-8" />
+                  </div>
                 )}
               </div>
             </div>

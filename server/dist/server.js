@@ -7,6 +7,7 @@ import clerkWebhooks from './controllers/clerk.js';
 import * as Sentry from "@sentry/node";
 import userRouter from "./routes/userRoutes.js";
 import projectRouter from "./routes/projectRoutes.js";
+import { getActiveGeminiImageModels } from "./controllers/projectController.js";
 import path from "path";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
@@ -14,6 +15,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const BUILD_VERSION = 'ai-lifestyle-image-v2';
 const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
     : [];
@@ -35,6 +37,14 @@ app.use(clerkMiddleware());
 app.get('/api', (req, res) => {
     res.send('API is Live!');
 });
+app.get('/api/version', (req, res) => {
+    res.json({
+        version: BUILD_VERSION,
+        imageEngine: 'gemini-lifestyle-reference-composition',
+        imageModels: getActiveGeminiImageModels(),
+        fallbackOverlayEnabled: false,
+    });
+});
 app.get("/debug-sentry", function mainHandler(req, res) {
     throw new Error("My first Sentry error!");
 });
@@ -52,4 +62,5 @@ if (NODE_ENV === "production") {
 }
 app.listen(PORT, () => {
     console.log(`Server is running in ${NODE_ENV} mode at port ${PORT}`);
+    console.log(`Image generation models: ${getActiveGeminiImageModels().join(', ')}`);
 });
