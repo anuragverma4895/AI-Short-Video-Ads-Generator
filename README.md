@@ -33,6 +33,36 @@
 - **Clerk Node**: Authentication
 - **Dotenv**: Environment Variables
 
+## Folder Structure
+
+```text
+AI-Short-Video-Ads-Generator/
+├── client/                      # React Frontend Application (Vite + TS)
+│   ├── public/                  # Static assets and icons
+│   └── src/
+│       ├── assets/              # Images, videos, and illustration assets
+│       ├── components/          # Reusable components (Navbar, Hero, Lenis, CTA, Faq, etc.)
+│       ├── configs/             # Axios API base configuration
+│       ├── pages/               # App views (Home, Plans, Generator, MyGenerations, Result, Community)
+│       ├── types/               # TypeScript interface definitions
+│       ├── App.tsx              # Main routing & application layout
+│       ├── index.css            # Tailwind & global stylesheet
+│       └── main.tsx             # SPA React client entry point
+├── server/                      # Express Backend Server (Node.js + TS)
+│   ├── configs/                 # Sentry, Prisma, and Multer configurations
+│   ├── controllers/             # Request handlers (user profile, Clerk webhooks, AI Gen engines)
+│   ├── middlewares/             # Security, auth gating, and request validation middlewares
+│   ├── prisma/                  # Prisma Database schema (schema.prisma)
+│   ├── routes/                  # REST endpoints mapping (userRoutes, projectRoutes)
+│   ├── types/                   # Express & request extension typings
+│   ├── utils/                   # Shared utility modules (e.g., API Pool managers)
+│   └── server.ts                # App entry point & server runner
+├── FLOW_DIAGRAM.md              # System flow charts and details
+├── index.js                     # Fallback production server entry script
+├── package.json                 # Global packages & configurations
+└── README.md                    # Core documentation & developer manual
+```
+
 ## Getting Started
 
 ### Prerequisites
