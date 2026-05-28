@@ -5,16 +5,18 @@
   "type": "module",
   "scripts": {
     "render-build": "npm install --include=dev --prefix client && npm run build --prefix client && npm install --include=dev --prefix server && npm run build --prefix server",
-
     "build": "npm run render-build",
     "render-start": "node index.js",
     "start": "node index.js",
-
     "client": "npm run dev --prefix client",
     "server": "npm run dev --prefix server",
     "dev": "concurrently \"npm run client\" \"npm run server\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "md-to-pdf": "^5.2.5",
+    "pdf-lib": "^1.17.1"
   }
 }
