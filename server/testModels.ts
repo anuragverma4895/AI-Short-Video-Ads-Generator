@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const ai = new GoogleGenAI({ 
-  apiKey: process.env.GOOGLE_CLOUD_API_KEY,
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 async function testImagen3() {

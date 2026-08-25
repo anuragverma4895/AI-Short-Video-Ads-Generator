@@ -1,53 +1,24 @@
 import dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
 dotenv.config();
 
 /**
- * Parses API keys from the environment. GEMINI_API_KEYS supports comma-separated
- * values; the single-key env names are kept as fallbacks for local setups.
+ * Resolves one Gemini API key for the whole generation pipeline.
  */
-const getApiKeys = (): string[] => {
-    const pooledKeys = (process.env.GEMINI_API_KEYS || '')
-        .split(',')
-        .map(key => key.trim())
-        .filter(Boolean);
+export const getGeminiApiKey = (): string => {
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-    const fallbackKeys = [
-        process.env.GEMINI_API_KEY,
-        process.env.GOOGLE_API_KEY,
-        process.env.GOOGLE_CLOUD_API_KEY,
-    ].filter((key): key is string => Boolean(key?.trim()));
-
-    return [...new Set([...pooledKeys, ...fallbackKeys])];
-};
-
-const shuffle = <T>(items: T[]) => {
-    const copy = [...items];
-    for (let i = copy.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-}
-
-/**
- * Returns all available Gemini keys in random order for retry/failover.
- */
-export const getGeminiKeys = (): string[] => {
-    const keys = getApiKeys();
-    if (keys.length === 0) {
-        throw new Error("No Gemini API keys found in the environment. Please check GEMINI_API_KEYS.");
+    if (!apiKey) {
+        throw new Error("No Gemini API key found. Please set GEMINI_API_KEY in server/.env.");
     }
 
-    return shuffle(keys);
+    return apiKey;
 };
 
-/**
- * Returns a random API key from the pool.
- */
-export const getRandomGeminiKey = (): string => {
-    const [selectedKey] = getGeminiKeys();
-    console.log(`[API Pool] Using key ending in ...${selectedKey.slice(-4)}`);
-    return selectedKey;
+export const createGeminiClient = () => {
+    const apiKey = getGeminiApiKey();
+    console.log(`[Gemini] Using API key ending in ...${apiKey.slice(-4)}`);
+    return new GoogleGenAI({ apiKey });
 };
 
 export const isGeminiQuotaError = (error: any) => {

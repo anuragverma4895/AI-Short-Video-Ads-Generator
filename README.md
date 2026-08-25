@@ -28,7 +28,7 @@
 - **Node.js**: Runtime Environment
 - **Express**: Web Framework
 - **TypeScript**: Type Safety
-- **Google GenAI**: AI Model Integration
+- **Google GenAI**: Gemini image generation and Veo image-to-video integration
 - **Multer**: File Upload Handling
 - **Clerk Node**: Authentication
 - **Dotenv**: Environment Variables
@@ -68,7 +68,7 @@ AI-Short-Video-Ads-Generator/
 ### Prerequisites
 - Node.js (v18 or higher)
 - npm or yarn
-- Google Cloud API Key
+- Gemini API Key with image and Veo video generation access
 - Clerk Publishable Key
 
 ### Installation
@@ -87,7 +87,9 @@ AI-Short-Video-Ads-Generator/
     Create a `.env` file in the `server` directory with the following variables:
     ```env
     PORT=5000
-    GOOGLE_CLOUD_API_KEY=[GCP_API_KEY]
+    GEMINI_API_KEY=your_gemini_api_key
+    GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+    GEMINI_VIDEO_MODEL=veo-3.1-generate-preview
     CLERK_SECRET_KEY=your_clerk_secret_key
     CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
     ```

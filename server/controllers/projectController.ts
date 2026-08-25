@@ -5,34 +5,39 @@ import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { Client } from '@gradio/client';
-import { GoogleGenAI, Modality } from '@google/genai';
-import { getGeminiKeys, isGeminiQuotaError } from '../utils/apiPool.js';
+import { Modality } from '@google/genai';
+import { createGeminiClient, isGeminiQuotaError } from '../utils/apiPool.js';
 
-const DEFAULT_GEMINI_IMAGE_MODELS = [
-    'gemini-2.5-flash-image',
-    'gemini-2.5-flash-image-preview',
-    'gemini-3-pro-image-preview',
-];
+const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+const DEFAULT_GEMINI_VIDEO_MODEL = 'veo-3.1-generate-preview';
+const DEFAULT_GEMINI_VIDEO_POLL_INTERVAL_MS = 10000;
+const DEFAULT_GEMINI_VIDEO_TIMEOUT_MS = 10 * 60 * 1000;
 
 const normalizeGeminiModelName = (model: string) => model.trim().replace(/^models\//, '');
 
 const isDeprecatedGeminiImageModel = (model: string) =>
     normalizeGeminiModelName(model).includes('gemini-2.0-flash-preview-image-generation');
 
-const getGeminiImageModels = () => {
-    const configuredModels = process.env.GEMINI_IMAGE_MODELS || '';
+const getConfiguredGeminiModel = (envName: string, fallbackModel: string) => {
+    const configuredModel = process.env[envName]?.split(',')[0];
+    const model = normalizeGeminiModelName(configuredModel || fallbackModel);
 
-    const models = configuredModels
-        .split(',')
-        .map(normalizeGeminiModelName)
-        .filter(Boolean)
-        .filter(model => !isDeprecatedGeminiImageModel(model));
+    if (!model || isDeprecatedGeminiImageModel(model)) {
+        return fallbackModel;
+    }
 
-    return [...new Set([...DEFAULT_GEMINI_IMAGE_MODELS, ...models])];
-}
+    return model;
+};
 
-export const getActiveGeminiImageModels = () => getGeminiImageModels();
+const getGeminiImageModel = () => getConfiguredGeminiModel('GEMINI_IMAGE_MODEL', DEFAULT_GEMINI_IMAGE_MODEL);
+const getGeminiVideoModel = () => getConfiguredGeminiModel('GEMINI_VIDEO_MODEL', DEFAULT_GEMINI_VIDEO_MODEL);
+
+const getGeminiVideoPollIntervalMs = () => Number(process.env.GEMINI_VIDEO_POLL_INTERVAL_MS) || DEFAULT_GEMINI_VIDEO_POLL_INTERVAL_MS;
+const getGeminiVideoTimeoutMs = () => Number(process.env.GEMINI_VIDEO_TIMEOUT_MS) || DEFAULT_GEMINI_VIDEO_TIMEOUT_MS;
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const getActiveGeminiImageModels = () => [getGeminiImageModel()];
+export const getActiveGeminiVideoModel = () => getGeminiVideoModel();
 
 const uploadBufferToCloudinary = (buffer: Buffer, resourceType: 'image' | 'video' = 'image') =>
     new Promise<string>((resolve, reject) => {
@@ -101,56 +106,146 @@ const generateLifestyleAdImage = async ({
     const productImageBase64 = fs.readFileSync(productFile.path).toString('base64');
     const modelImageBase64 = fs.readFileSync(modelFile.path).toString('base64');
     const prompt = getAdImagePrompt({ productName, productDescription, userPrompt, aspectRatio });
-    let lastError: any;
+    const model = getGeminiImageModel();
+    const ai = createGeminiClient();
 
-    for (const model of getGeminiImageModels()) {
-        for (const apiKey of getGeminiKeys()) {
-            try {
-                console.log(`[Image Gen] Trying ${model} with key ending in ...${apiKey.slice(-4)}`);
-            const ai = new GoogleGenAI({ apiKey });
-            const response = await ai.models.generateContent({
-                model,
-                contents: [
-                    { text: prompt },
-                    {
-                        inlineData: {
-                            mimeType: productFile.mimetype || 'image/jpeg',
-                            data: productImageBase64,
-                        },
+    try {
+        console.log(`[Image Gen] Generating with ${model}`);
+        const response = await ai.models.generateContent({
+            model,
+            contents: [
+                { text: prompt },
+                {
+                    inlineData: {
+                        mimeType: productFile.mimetype || 'image/jpeg',
+                        data: productImageBase64,
                     },
-                    {
-                        inlineData: {
-                            mimeType: modelFile.mimetype || 'image/jpeg',
-                            data: modelImageBase64,
-                        },
-                    },
-                ] as any,
-                config: {
-                    responseModalities: [Modality.TEXT, Modality.IMAGE],
                 },
-            });
+                {
+                    inlineData: {
+                        mimeType: modelFile.mimetype || 'image/jpeg',
+                        data: modelImageBase64,
+                    },
+                },
+            ] as any,
+            config: {
+                responseModalities: [Modality.TEXT, Modality.IMAGE],
+            },
+        });
 
-            const imagePart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData?.data);
-            const imageData = imagePart?.inlineData?.data;
-            if (!imageData) {
-                throw new Error('Gemini image model returned no image');
-            }
-
-            return Buffer.from(imageData, 'base64');
-            } catch (error: any) {
-                lastError = error;
-                if (isGeminiQuotaError(error)) {
-                    console.warn(`[Image Gen] ${model} key ...${apiKey.slice(-4)} quota/rate limited. Trying next key.`);
-                    continue;
-                }
-
-                console.warn(`[Image Gen] ${model} key ...${apiKey.slice(-4)} failed. Trying next option.`, error?.message || error);
-            }
+        const imagePart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData?.data);
+        const imageData = imagePart?.inlineData?.data;
+        if (!imageData) {
+            throw new Error('Gemini image model returned no image');
         }
+
+        return Buffer.from(imageData, 'base64');
+    } catch (error: any) {
+        if (isGeminiQuotaError(error)) {
+            throw new Error('Gemini image generation quota is exhausted or rate limited for the configured API key.');
+        }
+
+        throw error;
+    }
+}
+
+const normalizeVideoAspectRatio = (aspectRatio?: string | null) => aspectRatio === '16:9' ? '16:9' : '9:16';
+
+const getAdVideoPrompt = ({
+    productName,
+    productDescription,
+    userPrompt,
+}: {
+    productName: string;
+    productDescription?: string | null;
+    userPrompt?: string | null;
+}) => `Create a premium short-form UGC advertising video from the provided generated lifestyle ad image.
+
+Product: ${productName}
+Product notes: ${productDescription || 'Keep the product as the hero object.'}
+Creative direction: ${userPrompt || 'Create smooth camera movement for a premium social media product ad.'}
+
+Animate the existing scene naturally with subtle cinematic camera movement, realistic lighting changes, clean product emphasis, and polished commercial pacing. Keep the same product and person recognizable. Do not add captions, logos, watermarks, UI, borders, or distorted extra products.`;
+
+const getVideoDurationSeconds = (targetLength?: number | null) => {
+    const duration = Number(targetLength);
+    if (!Number.isFinite(duration)) return undefined;
+    return Math.min(Math.max(Math.round(duration), 4), 8);
+};
+
+const getGeminiGeneratedVideoBuffer = async ({
+    imageUrl,
+    productName,
+    productDescription,
+    userPrompt,
+    aspectRatio,
+    targetLength,
+}: {
+    imageUrl: string;
+    productName: string;
+    productDescription?: string | null;
+    userPrompt?: string | null;
+    aspectRatio?: string | null;
+    targetLength?: number | null;
+}) => {
+    const ai = createGeminiClient();
+    const model = getGeminiVideoModel();
+    const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    const imageBytes = Buffer.from(imageResponse.data).toString('base64');
+    const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
+    const prompt = getAdVideoPrompt({ productName, productDescription, userPrompt });
+
+    console.log(`[Video Gen] Generating with ${model}`);
+    let operation: any = await ai.models.generateVideos({
+        model,
+        prompt,
+        image: {
+            imageBytes,
+            mimeType,
+        },
+        config: {
+            numberOfVideos: 1,
+            aspectRatio: normalizeVideoAspectRatio(aspectRatio),
+            durationSeconds: getVideoDurationSeconds(targetLength),
+            personGeneration: 'allow_adult',
+        },
+    });
+
+    const startedAt = Date.now();
+    const pollIntervalMs = getGeminiVideoPollIntervalMs();
+    const timeoutMs = getGeminiVideoTimeoutMs();
+
+    while (!operation.done) {
+        if (Date.now() - startedAt > timeoutMs) {
+            throw new Error('Gemini video generation timed out. Please try again later.');
+        }
+
+        console.log('[Video Gen] Waiting for Gemini video operation...');
+        await wait(pollIntervalMs);
+        operation = await ai.operations.getVideosOperation({ operation });
     }
 
-    throw lastError || new Error('Gemini image generation failed');
-}
+    if (operation.error) {
+        throw new Error(`Gemini video generation failed: ${JSON.stringify(operation.error)}`);
+    }
+
+    const generatedVideo = operation.response?.generatedVideos?.[0]?.video;
+    if (!generatedVideo) {
+        throw new Error('Gemini video model returned no video');
+    }
+
+    if (generatedVideo.videoBytes) {
+        return Buffer.from(generatedVideo.videoBytes, 'base64');
+    }
+
+    const downloadPath = path.join(process.cwd(), `gemini-video-${Date.now()}-${Math.round(Math.random() * 1000000)}.mp4`);
+    try {
+        await ai.files.download({ file: generatedVideo, downloadPath });
+        return await fs.promises.readFile(downloadPath);
+    } finally {
+        await fs.promises.unlink(downloadPath).catch(() => undefined);
+    }
+};
 
 export const createProject = async (req: Request, res: Response) => {
     let tempProjectId: string | undefined;
@@ -294,6 +389,7 @@ export const createVideo = async (req: Request, res: Response) => {
         })
 
         if (!project || project.isGenerating) return res.status(404).json({ message: 'Generation already in progress' });
+        if (!project.generatedImage) return res.status(400).json({ message: 'Please generate an image before creating a video' });
         if (project.generatedVideo) return res.status(404).json({ message: 'Video already generated' });
 
         await prisma.project.update({
@@ -301,47 +397,34 @@ export const createVideo = async (req: Request, res: Response) => {
             data: { isGenerating: true }
         })
 
-        console.log("Connecting to Gradio SVD Space...");
+        console.log("Generating video with Gemini Veo...");
         try {
-            // Using stable-video-diffusion for Image -> Video
-            const client = await Client.connect("multimodalart/stable-video-diffusion");
-            const imageResponse = await axios.get(project.generatedImage, { responseType: 'arraybuffer' });
-            const sourceImage = new Blob([imageResponse.data], {
-                type: imageResponse.headers['content-type'] || 'image/jpeg',
+            const generatedVideoBuffer = await getGeminiGeneratedVideoBuffer({
+                imageUrl: project.generatedImage,
+                productName: project.productName,
+                productDescription: project.productDescription,
+                userPrompt: project.userPrompt,
+                aspectRatio: project.aspectRatio,
+                targetLength: project.targetLength,
             });
-            
-            const result = await client.predict("/video", {
-                image: sourceImage,
-                motion_bucket_id: 127,
-                cond_aug: 0.02,
-                decoding_t: 1,
-                seed: Math.floor(Math.random() * 100000)
-            });
-
-            const outputData: any = result?.data;
-            let generatedVideoUrl = "";
-            if (outputData && outputData.length > 0) {
-                 generatedVideoUrl = typeof outputData[0] === 'string' ? outputData[0] : outputData[0]?.url;
-            }
-            if(!generatedVideoUrl) throw new Error("Gradio Client SVD returned empty data");
-
-            // Upload video to Cloudinary
-            const finalUpload = await cloudinary.uploader.upload(generatedVideoUrl, { resource_type: 'video' });
+            const generatedVideoUrl = await uploadBufferToCloudinary(generatedVideoBuffer, 'video');
             
             await prisma.project.update({
                 where: { id: projectId },
                 data: {
-                    generatedVideo: finalUpload.secure_url,
+                    generatedVideo: generatedVideoUrl,
                     isGenerating: false
                 }
             });
 
-            return res.json({ message: 'Video generation completed', videoUrl: finalUpload.secure_url });
-        } catch (gradioError: any) {
-            console.error('SVD Generation Failed:', gradioError.message);
-            throw new Error(`Video generation failed over Free API: ${gradioError.message}. Please try again later.`);
+            return res.json({ message: 'Video generation completed', videoUrl: generatedVideoUrl });
+        } catch (geminiError: any) {
+            console.error('Gemini video generation failed:', geminiError.message);
+            if (isGeminiQuotaError(geminiError)) {
+                throw new Error('Gemini video generation quota is exhausted or rate limited for the configured API key.');
+            }
+            throw new Error(`Video generation failed with Gemini: ${geminiError.message}. Please try again later.`);
         }
-
     } catch (error: any) {
         await prisma.project.update({
             where: { id: projectId, userId },

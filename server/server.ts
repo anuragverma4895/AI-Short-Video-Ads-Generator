@@ -7,7 +7,7 @@ import clerkWebhooks  from './controllers/clerk.js';
 import * as Sentry from "@sentry/node"
 import userRouter from "./routes/userRoutes.js";
 import projectRouter from "./routes/projectRoutes.js";
-import { getActiveGeminiImageModels } from "./controllers/projectController.js";
+import { getActiveGeminiImageModels, getActiveGeminiVideoModel } from "./controllers/projectController.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -53,6 +53,8 @@ app.get('/api/version', (req: Request, res: Response) => {
         version: BUILD_VERSION,
         imageEngine: 'gemini-lifestyle-reference-composition',
         imageModels: getActiveGeminiImageModels(),
+        videoEngine: 'gemini-veo-image-to-video',
+        videoModel: getActiveGeminiVideoModel(),
         fallbackOverlayEnabled: false,
     });
 });
@@ -82,5 +84,6 @@ if (NODE_ENV === "production") {
 
 app.listen(PORT, () => {
     console.log(`Server is running in ${NODE_ENV} mode at port ${PORT}`);
-    console.log(`Image generation models: ${getActiveGeminiImageModels().join(', ')}`);
+    console.log(`Image generation model: ${getActiveGeminiImageModels().join(', ')}`);
+    console.log(`Video generation model: ${getActiveGeminiVideoModel()}`);
 });

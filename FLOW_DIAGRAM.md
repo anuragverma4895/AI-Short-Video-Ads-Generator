@@ -23,7 +23,7 @@ graph TD
     D[Clerk Authentication]:::externalStyle
     E[Cloudinary Storage]:::externalStyle
     F[Google Gemini Image API]:::externalStyle
-    G[Gradio SVD Space]:::externalStyle
+    G[Google Gemini Veo Video API]:::externalStyle
 
     %% Connections
     A <-->|HTTP Requests / Auth Token| B
@@ -52,7 +52,7 @@ sequenceDiagram
     participant DB as PostgreSQL (Prisma)
     participant Cloud as Cloudinary
     participant Gemini as Google Gemini AI
-    participant Gradio as Gradio SVD Space
+    participant Veo as Google Gemini Veo
 
     %% Step 1: User Login
     Note over User, Server: Phase 1: Authentication & Onboarding
@@ -80,16 +80,16 @@ sequenceDiagram
     Server-->>User: Return Project Details (display generated image)
 
     %% Step 3: Video Generation
-    Note over User, Gradio: Phase 3: SVD Video Generation
+    Note over User, Veo: Phase 3: Gemini Veo Video Generation
     User->>Server: Trigger "Generate Video" for projectId
     Note over Server: Deduct 10 credits from User
     Server->>DB: Update User credits
     Server->>DB: Mark project as isGenerating=true
     
     Server->>Server: Download generated image from Cloudinary
-    Server->>Gradio: Send image to multimodalart/stable-video-diffusion space
-    Note over Gradio: Processes image to add camera pans & movement (SVD)
-    Gradio-->>Server: Return generated video path/URL
+    Server->>Veo: Send generated image + video prompt
+    Note over Veo: Creates short image-to-video ad clip
+    Veo-->>Server: Return generated video bytes/file
     Server->>Cloud: Upload video file
     Cloud-->>Server: Return secure generatedVideo URL
     Server->>DB: Update Project (status: idle, generatedVideo: URL)
@@ -103,15 +103,15 @@ sequenceDiagram
 ### 1. Client App (`/client`)
 - **UploadZone**: Accepts two source files: a clean product shot and a model/lifestyle reference shot.
 - **Generator Form**: Gathers key promotional parameters (Product Name, Product Description, Custom Target Prompt, Aspect Ratio, and Duration).
-- **Result Screen**: Renders the AI composite image immediately after generation. Displays the active rendering states during Stable Video Diffusion (SVD) video rendering.
+- **Result Screen**: Renders the AI composite image immediately after generation. Displays the active rendering states during Gemini Veo video rendering.
 - **My Generations & Community Showcase**: Offers views to look up past projects or publish successful ads to the community feed.
 
 ### 2. Backend Server (`/server`)
 - **Authentication Middlewares**: Verifies JSON Web Tokens (JWT) signed by Clerk before allowing any protected mutation.
 - **Multer Storage**: Handles disk-based multi-part file uploads locally before streaming them to Cloudinary.
-- **API Pool Manager**: Automatically cycles through configured Google Cloud API Keys if one is rate-limited or hits quota thresholds during Gemini operations.
-- **Gemini Ad Image Fusion Engine**: Compiles a highly detailed multi-part prompt, attaching the product image as Reference 1 and the model image as Reference 2. It utilizes models like `gemini-2.5-flash-image` and `gemini-3-pro-image-preview` with dual modality outputs (`Modality.TEXT` & `Modality.IMAGE`).
-- **Gradio Bridge Client**: Pulls SVD frames asynchronously from `multimodalart/stable-video-diffusion` and processes the video streams.
+- **Gemini Client**: Uses one configured `GEMINI_API_KEY` for image and video generation.
+- **Gemini Ad Image Fusion Engine**: Compiles a highly detailed multi-part prompt, attaching the product image as Reference 1 and the model image as Reference 2. It uses the single configured `GEMINI_IMAGE_MODEL` with dual modality outputs (`Modality.TEXT` & `Modality.IMAGE`).
+- **Gemini Veo Video Engine**: Sends the generated lifestyle image to `GEMINI_VIDEO_MODEL`, polls the Gemini operation, and uploads the finished video to Cloudinary.
 
 ### 3. Database Layer (`prisma/schema.prisma`)
 - **User Model**: Holds Clerk ID, user profile data, and balances credits. Every new user receives a default of `20 credits`.
@@ -122,5 +122,5 @@ sequenceDiagram
 ## 💳 Credit System Rules
 - **Onboarding**: `+20 credits` (Automatically on first login).
 - **Image Composition**: `-5 credits` (Successfully fusing product & model reference images).
-- **Video Motion Generation**: `-10 credits` (Generating short motion clip via Stable Video Diffusion).
+- **Video Motion Generation**: `-10 credits` (Generating short motion clip via Gemini Veo).
 - **Refund Policy**: If an API or model fail occurs, the server automatically executes a rollback transaction, returning the credits back to the user's balance.

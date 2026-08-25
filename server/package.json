@@ -11,16 +11,14 @@
     "build": "tsc",
     "postinstall": "prisma generate --schema=./prisma/schema.prisma"
   },
-
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@clerk/express": "^2.0.4",
+    "@google/genai": "latest",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
-    "@gradio/client": "^1.5.0",
-    "@google/genai": "latest",
     "@sentry/node": "^10.43.0",
     "axios": "^1.13.6",
     "cloudinary": "^2.9.0",

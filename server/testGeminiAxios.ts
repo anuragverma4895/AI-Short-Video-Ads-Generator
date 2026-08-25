@@ -4,7 +4,7 @@ dotenv.config();
 
 async function testGeminiAxios() {
   try {
-    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     
     console.log(`Calling Gemini via axios...`);
