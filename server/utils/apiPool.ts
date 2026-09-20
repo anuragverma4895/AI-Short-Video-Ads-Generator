@@ -1,27 +1,38 @@
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
 dotenv.config();
 
+const XAI_BASE_URL = 'https://api.x.ai/v1';
+
 /**
- * Resolves one Gemini API key for the whole generation pipeline.
+ * Resolves the xAI API key for the whole generation pipeline.
  */
-export const getGeminiApiKey = (): string => {
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
+export const getXaiApiKey = (): string => {
+    const apiKey = process.env.XAI_API_KEY?.trim();
 
     if (!apiKey) {
-        throw new Error("No Gemini API key found. Please set GEMINI_API_KEY in server/.env.");
+        throw new Error("No xAI API key found. Please set XAI_API_KEY in server/.env.");
     }
 
     return apiKey;
 };
 
-export const createGeminiClient = () => {
-    const apiKey = getGeminiApiKey();
-    console.log(`[Gemini] Using API key ending in ...${apiKey.slice(-4)}`);
-    return new GoogleGenAI({ apiKey });
-};
+/**
+ * Returns common headers for xAI API requests.
+ */
+export const getXaiHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${getXaiApiKey()}`,
+});
 
-export const isGeminiQuotaError = (error: any) => {
+/**
+ * Returns the xAI base URL.
+ */
+export const getXaiBaseUrl = () => XAI_BASE_URL;
+
+/**
+ * Checks if the error is a quota/rate-limit error from xAI.
+ */
+export const isQuotaError = (error: any) => {
     const message = JSON.stringify(error?.error || error?.response?.data || error?.message || error).toLowerCase();
     return (
         error?.status === 429 ||
@@ -29,6 +40,7 @@ export const isGeminiQuotaError = (error: any) => {
         error?.response?.status === 429 ||
         message.includes('resource_exhausted') ||
         message.includes('quota') ||
-        message.includes('rate limit')
+        message.includes('rate limit') ||
+        message.includes('rate_limit')
     );
 }

@@ -5,39 +5,22 @@ import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { Modality } from '@google/genai';
-import { createGeminiClient, isGeminiQuotaError } from '../utils/apiPool.js';
+import { getXaiHeaders, getXaiBaseUrl, isQuotaError } from '../utils/apiPool.js';
 
-const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
-const DEFAULT_GEMINI_VIDEO_MODEL = 'veo-3.1-generate-preview';
-const DEFAULT_GEMINI_VIDEO_POLL_INTERVAL_MS = 10000;
-const DEFAULT_GEMINI_VIDEO_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_XAI_IMAGE_MODEL = 'grok-imagine-image';
+const DEFAULT_XAI_VIDEO_MODEL = 'grok-imagine-video';
+const DEFAULT_XAI_VIDEO_POLL_INTERVAL_MS = 10000;
+const DEFAULT_XAI_VIDEO_TIMEOUT_MS = 10 * 60 * 1000;
 
-const normalizeGeminiModelName = (model: string) => model.trim().replace(/^models\//, '');
+const getXaiImageModel = () => process.env.XAI_IMAGE_MODEL?.trim() || DEFAULT_XAI_IMAGE_MODEL;
+const getXaiVideoModel = () => process.env.XAI_VIDEO_MODEL?.trim() || DEFAULT_XAI_VIDEO_MODEL;
 
-const isDeprecatedGeminiImageModel = (model: string) =>
-    normalizeGeminiModelName(model).includes('gemini-2.0-flash-preview-image-generation');
-
-const getConfiguredGeminiModel = (envName: string, fallbackModel: string) => {
-    const configuredModel = process.env[envName]?.split(',')[0];
-    const model = normalizeGeminiModelName(configuredModel || fallbackModel);
-
-    if (!model || isDeprecatedGeminiImageModel(model)) {
-        return fallbackModel;
-    }
-
-    return model;
-};
-
-const getGeminiImageModel = () => getConfiguredGeminiModel('GEMINI_IMAGE_MODEL', DEFAULT_GEMINI_IMAGE_MODEL);
-const getGeminiVideoModel = () => getConfiguredGeminiModel('GEMINI_VIDEO_MODEL', DEFAULT_GEMINI_VIDEO_MODEL);
-
-const getGeminiVideoPollIntervalMs = () => Number(process.env.GEMINI_VIDEO_POLL_INTERVAL_MS) || DEFAULT_GEMINI_VIDEO_POLL_INTERVAL_MS;
-const getGeminiVideoTimeoutMs = () => Number(process.env.GEMINI_VIDEO_TIMEOUT_MS) || DEFAULT_GEMINI_VIDEO_TIMEOUT_MS;
+const getXaiVideoPollIntervalMs = () => Number(process.env.XAI_VIDEO_POLL_INTERVAL_MS) || DEFAULT_XAI_VIDEO_POLL_INTERVAL_MS;
+const getXaiVideoTimeoutMs = () => Number(process.env.XAI_VIDEO_TIMEOUT_MS) || DEFAULT_XAI_VIDEO_TIMEOUT_MS;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export const getActiveGeminiImageModels = () => [getGeminiImageModel()];
-export const getActiveGeminiVideoModel = () => getGeminiVideoModel();
+export const getActiveImageModels = () => [getXaiImageModel()];
+export const getActiveVideoModel = () => getXaiVideoModel();
 
 const uploadBufferToCloudinary = (buffer: Buffer, resourceType: 'image' | 'video' = 'image') =>
     new Promise<string>((resolve, reject) => {
@@ -106,43 +89,48 @@ const generateLifestyleAdImage = async ({
     const productImageBase64 = fs.readFileSync(productFile.path).toString('base64');
     const modelImageBase64 = fs.readFileSync(modelFile.path).toString('base64');
     const prompt = getAdImagePrompt({ productName, productDescription, userPrompt, aspectRatio });
-    const model = getGeminiImageModel();
-    const ai = createGeminiClient();
+    const model = getXaiImageModel();
+
+    const productMime = productFile.mimetype || 'image/jpeg';
+    const modelMime = modelFile.mimetype || 'image/jpeg';
 
     try {
-        console.log(`[Image Gen] Generating with ${model}`);
-        const response = await ai.models.generateContent({
-            model,
-            contents: [
-                { text: prompt },
-                {
-                    inlineData: {
-                        mimeType: productFile.mimetype || 'image/jpeg',
-                        data: productImageBase64,
-                    },
-                },
-                {
-                    inlineData: {
-                        mimeType: modelFile.mimetype || 'image/jpeg',
-                        data: modelImageBase64,
-                    },
-                },
-            ] as any,
-            config: {
-                responseModalities: [Modality.TEXT, Modality.IMAGE],
+        console.log(`[Image Gen] Generating with xAI ${model}`);
+        const response = await axios.post(
+            `${getXaiBaseUrl()}/images/edits`,
+            {
+                model,
+                prompt,
+                images: [
+                    { image_url: `data:${productMime};base64,${productImageBase64}` },
+                    { image_url: `data:${modelMime};base64,${modelImageBase64}` },
+                ],
             },
-        });
+            {
+                headers: getXaiHeaders(),
+                timeout: 120000,
+            }
+        );
 
-        const imagePart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData?.data);
-        const imageData = imagePart?.inlineData?.data;
-        if (!imageData) {
-            throw new Error('Gemini image model returned no image');
+        const imageUrl = response.data?.data?.[0]?.url;
+        if (!imageUrl) {
+            throw new Error('xAI image model returned no image');
         }
 
-        return Buffer.from(imageData, 'base64');
+        // Download the generated image to a buffer
+        const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+        return Buffer.from(imageResponse.data);
+
     } catch (error: any) {
-        if (isGeminiQuotaError(error)) {
-            throw new Error('Gemini image generation quota is exhausted or rate limited for the configured API key.');
+        if (isQuotaError(error)) {
+            throw new Error('xAI image generation quota is exhausted or rate limited for the configured API key.');
+        }
+
+        // Extract useful error message from xAI response
+        const xaiError = error?.response?.data;
+        if (xaiError) {
+            const errMsg = typeof xaiError === 'string' ? xaiError : JSON.stringify(xaiError);
+            throw new Error(`xAI image generation failed: ${errMsg}`);
         }
 
         throw error;
@@ -173,7 +161,7 @@ const getVideoDurationSeconds = (targetLength?: number | null) => {
     return Math.min(Math.max(Math.round(duration), 4), 8);
 };
 
-const getGeminiGeneratedVideoBuffer = async ({
+const getGrokGeneratedVideoBuffer = async ({
     imageUrl,
     productName,
     productDescription,
@@ -188,62 +176,71 @@ const getGeminiGeneratedVideoBuffer = async ({
     aspectRatio?: string | null;
     targetLength?: number | null;
 }) => {
-    const ai = createGeminiClient();
-    const model = getGeminiVideoModel();
-    const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-    const imageBytes = Buffer.from(imageResponse.data).toString('base64');
-    const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
+    const model = getXaiVideoModel();
     const prompt = getAdVideoPrompt({ productName, productDescription, userPrompt });
+    const duration = getVideoDurationSeconds(targetLength);
 
-    console.log(`[Video Gen] Generating with ${model}`);
-    let operation: any = await ai.models.generateVideos({
-        model,
-        prompt,
-        image: {
-            imageBytes,
-            mimeType,
-        },
-        config: {
-            numberOfVideos: 1,
-            aspectRatio: normalizeVideoAspectRatio(aspectRatio),
-            durationSeconds: getVideoDurationSeconds(targetLength),
-            personGeneration: 'allow_adult',
-        },
-    });
+    console.log(`[Video Gen] Generating with xAI ${model}`);
 
+    // Initiate video generation
+    const genResponse = await axios.post(
+        `${getXaiBaseUrl()}/videos/generations`,
+        {
+            model,
+            prompt,
+            image: {
+                url: imageUrl,
+            },
+            ...(duration ? { duration } : {}),
+        },
+        {
+            headers: getXaiHeaders(),
+            timeout: 30000,
+        }
+    );
+
+    const requestId = genResponse.data?.request_id;
+    if (!requestId) {
+        throw new Error('xAI video generation returned no request_id');
+    }
+
+    // Poll for completion
     const startedAt = Date.now();
-    const pollIntervalMs = getGeminiVideoPollIntervalMs();
-    const timeoutMs = getGeminiVideoTimeoutMs();
+    const pollIntervalMs = getXaiVideoPollIntervalMs();
+    const timeoutMs = getXaiVideoTimeoutMs();
 
-    while (!operation.done) {
+    while (true) {
         if (Date.now() - startedAt > timeoutMs) {
-            throw new Error('Gemini video generation timed out. Please try again later.');
+            throw new Error('xAI video generation timed out. Please try again later.');
         }
 
-        console.log('[Video Gen] Waiting for Gemini video operation...');
+        console.log('[Video Gen] Waiting for xAI video operation...');
         await wait(pollIntervalMs);
-        operation = await ai.operations.getVideosOperation({ operation });
-    }
 
-    if (operation.error) {
-        throw new Error(`Gemini video generation failed: ${JSON.stringify(operation.error)}`);
-    }
+        const statusResponse = await axios.get(
+            `${getXaiBaseUrl()}/videos/${requestId}`,
+            { headers: { 'Authorization': `Bearer ${process.env.XAI_API_KEY}` } }
+        );
 
-    const generatedVideo = operation.response?.generatedVideos?.[0]?.video;
-    if (!generatedVideo) {
-        throw new Error('Gemini video model returned no video');
-    }
+        const status = statusResponse.data?.status;
 
-    if (generatedVideo.videoBytes) {
-        return Buffer.from(generatedVideo.videoBytes, 'base64');
-    }
+        if (status === 'COMPLETED' || status === 'completed') {
+            const videoUrl = statusResponse.data?.video_url || statusResponse.data?.data?.[0]?.url;
+            if (!videoUrl) {
+                throw new Error('xAI video generation completed but returned no video URL');
+            }
 
-    const downloadPath = path.join(process.cwd(), `gemini-video-${Date.now()}-${Math.round(Math.random() * 1000000)}.mp4`);
-    try {
-        await ai.files.download({ file: generatedVideo, downloadPath });
-        return await fs.promises.readFile(downloadPath);
-    } finally {
-        await fs.promises.unlink(downloadPath).catch(() => undefined);
+            // Download the video to a buffer
+            const videoResponse = await axios.get(videoUrl, { responseType: 'arraybuffer' });
+            return Buffer.from(videoResponse.data);
+        }
+
+        if (status === 'FAILED' || status === 'failed') {
+            const errorMsg = statusResponse.data?.error || 'Unknown error';
+            throw new Error(`xAI video generation failed: ${JSON.stringify(errorMsg)}`);
+        }
+
+        // Otherwise still processing, continue polling
     }
 };
 
@@ -397,9 +394,9 @@ export const createVideo = async (req: Request, res: Response) => {
             data: { isGenerating: true }
         })
 
-        console.log("Generating video with Gemini Veo...");
+        console.log("Generating video with xAI Grok...");
         try {
-            const generatedVideoBuffer = await getGeminiGeneratedVideoBuffer({
+            const generatedVideoBuffer = await getGrokGeneratedVideoBuffer({
                 imageUrl: project.generatedImage,
                 productName: project.productName,
                 productDescription: project.productDescription,
@@ -418,12 +415,12 @@ export const createVideo = async (req: Request, res: Response) => {
             });
 
             return res.json({ message: 'Video generation completed', videoUrl: generatedVideoUrl });
-        } catch (geminiError: any) {
-            console.error('Gemini video generation failed:', geminiError.message);
-            if (isGeminiQuotaError(geminiError)) {
-                throw new Error('Gemini video generation quota is exhausted or rate limited for the configured API key.');
+        } catch (xaiError: any) {
+            console.error('xAI video generation failed:', xaiError.message);
+            if (isQuotaError(xaiError)) {
+                throw new Error('xAI video generation quota is exhausted or rate limited for the configured API key.');
             }
-            throw new Error(`Video generation failed with Gemini: ${geminiError.message}. Please try again later.`);
+            throw new Error(`Video generation failed with xAI: ${xaiError.message}. Please try again later.`);
         }
     } catch (error: any) {
         await prisma.project.update({
