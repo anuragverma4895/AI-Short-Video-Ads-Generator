@@ -4,6 +4,7 @@ dist
 PROJECT_DOCUMENTATION/
 .kilo/
 .code-review-graph/
+FLOW_DIAGRAM.md
 
 # Keep environment variables out of version control
 .env
