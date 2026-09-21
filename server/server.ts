@@ -51,9 +51,9 @@ app.get('/api', (req: Request, res: Response) => {
 app.get('/api/version', (req: Request, res: Response) => {
     res.json({
         version: BUILD_VERSION,
-        imageEngine: 'xai-grok-image-generation',
+        imageEngine: 'gemini-image-generation',
         imageModels: getActiveImageModels(),
-        videoEngine: 'xai-grok-video-generation',
+        videoEngine: 'gemini-video-generation',
         videoModel: getActiveVideoModel(),
         fallbackOverlayEnabled: false,
     });
